@@ -1,0 +1,449 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>Resource management in .NET</title>
+
+    <link rel="stylesheet" href="css/reveal.css">
+    <link rel="stylesheet" href="css/theme/black.css">
+
+    <!-- Theme used for syntax highlighting of code -->
+    <link rel="stylesheet" href="lib/css/zenburn.css">
+
+    <link rel="stylesheet" href="css/generations.css">
+
+    <!-- Printing and PDF exports -->
+    <script>
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.type = 'text/css';
+        link.href = window.location.search.match(/print-pdf/gi) ? 'css/print/pdf.css' : 'css/print/paper.css';
+        document.getElementsByTagName('head')[0].appendChild(link);
+    </script>
+</head>
+<body>
+<div class="reveal">
+    <div class="slides">
+        <section><h2>Resource management in .NET</h2></section>
+        <section>
+            <h2>Mechanisms</h2>
+            <ul>
+                <li>Explicit - Disposal</li>
+                <li>Implicit - Garbage collection</li>
+            </ul>
+        </section>
+        <section>
+            <h2>Disposal</h2>
+            Used to dispose unmanaged resources, like file handles,
+            locks, network connections...
+        </section>
+        <section>
+            <h2>IDisposable</h2>
+            <pre><code data-trim data-noescape>
+                        public interface IDisposable {
+                            void Dispose();
+                        }
+                    </code></pre>
+        </section>
+        <section>
+            <h2>using</h2>
+            <pre><code data-trim data-noescape>
+                        using (FileStream fs = new FileStream("file.txt", FileMode.Open))
+                        {
+                            // write to file
+                        }
+                    </code></pre>
+
+            &darr;
+
+            <pre><code data-trim data-noescape>
+                         FileStream fs = new FileStream("file.txt", FileMode.Open);
+                         try {
+                            // write to file
+                         } finally {
+                            if (fs != null) ((IDisposable) fs).Dispose();
+                         }
+            </code></pre>
+        </section>
+
+        <section>
+            <h2>Basic dispose pattern</h2>
+            <pre><code data-trim data-noescape>
+                        sealed class Demo : IDisposable
+                        {
+                            public void Dispose()
+                            {
+                            ...
+                            }
+                        }
+                    </code></pre>
+            Good for sealed classes
+        </section>
+
+        <section>
+            <h2>Dispose rules</h2>
+
+            <ul>
+                <li>Cannot recover object after disposal</li>
+                <li>Methods other than Dispose() throws ObjectDisposedException</li>
+                <li>It's perfectly safe to call Dispose() multiple times</li>
+                <li>Object propagates Dispose() to all disposable fields</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Close/Stop vs Dispose</h2>
+            <ul>
+                <li>Some classes provide Close/Stop method as well</li>
+                <li>Dispose doesn't allow to recover while Close/Stop does</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>When to dispose resource?</h2>
+            If you have finished with an object whose type implements IDisposable then call Dispose() on it
+        </section>
+
+        <section>
+            <h2>When to not perform resource disposal?</h2>
+            <ul>
+                <li>Resource is managed by other object</li>
+                <li>We'll need that resource later</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Unsubscribe event handlers</h2>
+            <pre class="stretch"><code data-trim data-noescape class="lang-csharp hljs">
+    public class Demo : IDisposable
+    {
+        private Subject subject;
+
+        Demo(Subject sub)
+        {
+            subject = sub;
+            subject.OnEvent += OnEventHandler;
+        }
+
+        private void OnEventHandler(object sender, OnEventArgs args) { ... }
+
+        public void Dispose()
+        {
+            subject.OnEvent -= OnEventHandler;
+        }
+    }
+                    </code></pre>
+        </section>
+
+        <section>
+            <h2>Define IsDisposed property</h2>
+            <pre><code data-trim data-noescape class="lang-csharp hljs">
+            public class Demo : IDisposable
+            {
+                public bool IsDisposed { get; private set; }
+
+                public void SomeMethod()
+                {
+                    if (IsDisposed) throw new ObjectDisposedException("");
+                }
+
+                public void Dispose()
+                {
+                    IsDisposed = true;
+                }
+            }
+            </code></pre>
+        </section>
+
+        <section>
+            <h2>Garbage collection</h2>
+
+            <pre><code data-trim data-noescape class="lang-csharp hljs">
+            public void Test()
+            {
+                byte[] array = new byte[1000];
+                // ...
+            }
+            </code></pre>
+            <ul>
+                <li>array will be removed soon</li>
+                <li>... but actually we don't know when</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Garbage collection</h2>
+            <ul>
+                <li>Performed periodically</li>
+                <li>Performed when needed (low memory, many memory allocations, timeout)</li>
+            </ul>
+        </section>
+        <section>
+            <h2>Garbage collector</h2>
+            Tries to balance garbage collection time and total memory usage
+        </section>
+
+        <section>
+            <h2>How GC determines that object can be removed?</h2>
+            <ul>
+                <li>There are no roots which point directly or indirectly to that object</li>
+                <li>Roots can be:
+                    <ul>
+                        <li>Local variables</li>
+                        <li>Static fields</li>
+                        <li>Objects in finalizer queue</li>
+                    </ul>
+                </li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Unreachable references</h2>
+
+            <pre class="stretch"><code data-trim data-noescape class="lang-csharp hljs">
+    class UnreachableRefs
+    {
+        private Dependency dep;
+
+        UnreachableRefs(Dependency d)
+        {
+            dep = d;
+        }
+
+        static void Test(Dependency d)
+        {
+            new UnreachableRefs(d);
+        }
+
+        static void Main(string[] args) {
+            Dependency d = new Dependency();
+            Test(d);
+        }
+    }</code></pre>
+
+        </section>
+
+        <section>
+            <h2>Cyclic dependencies</h2>
+
+            <pre><code data-trim data-noescape class="lang-csharp hljs">
+    public class CyclicDeps
+    {
+        private CyclicDeps other;
+
+        public CyclicDeps() { }
+
+        public CyclicDeps(CyclicDeps cd)
+        {
+            other = cd;
+            cd.other = this;
+        }
+     }</code></pre>
+        </section>
+
+        <section>
+            <h2>Finalizer</h2>
+            <pre><code data-trim data-noescape class="lang-csharp hljs">
+                class Test
+                {
+                    ~Test()
+                    {
+                        // ...
+                    }
+                }
+            </code></pre>
+
+            <ul>
+                <li>Cannot be public or static</li>
+                <li>Cannot have parameters</li>
+                <li>Cannot call base class</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Finalizer</h2>
+            <ul>
+                <li>If object doesn't have finalizer, it's collected immediately</li>
+                <li>Otherwise, it's queued in special Finalizer queue and collected when Finalizer thread wakes up</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Finalizer issues</h2>
+            <ul>
+                <li>May affect performance</li>
+                <li>Extends object's lifecycle</li>
+                <li>Called in unpredictable order</li>
+                <li>Cannot block or throw any exceptions</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Implementation hints</h2>
+            <ul>
+                <li>Execute it quickly</li>
+                <li>Never obtain any locks</li>
+                <li>Don't call any other 'finalizable' objects</li>
+                <li>Don't throw exceptions</li>
+                <li>Finalizer may be called even when constructor thrown exception</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Full Dispose pattern</h2>
+            <pre><code class="stretch" data-trim data-noescape>
+    public class MyClass : IDisposable
+    {
+        private AutoResetEvent myEvt;
+
+        protected virtual void Dispose(bool disposing)
+        {
+                // ...
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        ~MyClass()
+        {
+            Dispose(false);
+        }
+    }
+                    </code></pre>
+        </section>
+
+        <section>
+            <h2>Full Dispose pattern</h2>
+            <pre><code data-trim data-noescape>
+        private void ReleaseUnmanagedResources()
+        {
+            // TODO release unmanaged resources here
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            ReleaseUnmanagedResources();
+            if (disposing)
+            {
+                myEvt?.Dispose();
+            }
+        }
+         </code></pre>
+        </section>
+
+        <section>
+            <h3>Generate Dispose pattern</h3>
+            <img width="65%" height="65%" src="images/dispose-rider.png"/>
+        </section>
+
+        <section>
+            <h2>So how actually GC works?</h2>
+            <ul>
+                <li>Generational mark-and-compact GC</li>
+                <li>Monitors managed heap</li>
+                <li>Being activated after memory allocation (by new operator) or after exceeding allocated memory
+                    limits, or ...
+                </li>
+                <li>Can be activated manually by System.GC.Collect()</li>
+                <li>Can suspend all threads</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>So how actually GC works?</h2>
+            <ul>
+                <li>Looks for unreachable objects and marks them as "to remove"</li>
+                <li>Removes them immediately or adds to Finalizer queue (depending on finalizer existence)</li>
+                <li>Moves all "live" object to the beginning of the heap</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Why heap is compacted?</h2>
+            <ul>
+                <li>Avoid memory fragmentation</li>
+                <li>Easy and fast memory allocation</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Generations</h2>
+            <ul>
+                <li>GC organizes managed heap into 3 generations (Gen0, Gen1 and Gen2)</li>
+                <li>Newly allocated objects are assigned to Gen0</li>
+                <li>Objects which outlive first garbage collection are moved to Gen1</li>
+                <li>Other objects belong to Gen2</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Generations</h2>
+            <img width="65%" height="65%" src="images/gc_before.png"/>
+            <img width="65%" height="65%" src="images/gc_after.png"/>
+        </section>
+
+        <section>
+            <h2>Generations</h2>
+            <ul>
+                <li>Garbage collection for Gen0 and Gen1 is performed frequently and very quickly</li>
+                <li>Gen0 and Gen1 heap sizes are small (up to few MB)</li>
+                <li>Gen2 heap size is unlimited</li>
+                <li>Garbage collection for Gen2 is performed less frequently</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Large object heap</h2>
+
+            <ul>
+                <li>Contains objects that are 85,000 bytes or larger</li>
+                <li>Isn't compacted by default (possible slow allocations and fragmentation)</li>
+                <li>Below code can help:
+                </li>
+            </ul>
+
+            <pre><code data-trim data-noescape>
+        GCSettings.LargeObjectHeapCompactionMode =
+                GCLargeObjectHeapCompactionMode.CompactOnce;
+         </code></pre>
+        </section>
+
+        <section>
+            <h2>Background Garbage collection</h2>
+            <ul>
+                <li>GC suspends all threads for Gen0 and Gen1</li>
+                <li>GC tries to NOT suspend all threads for Gen2</li>
+            </ul>
+        </section>
+
+    </div>
+</div>
+
+<script src="lib/js/head.min.js"></script>
+<script src="js/reveal.js"></script>
+
+<script>
+    // More info about config & dependencies:
+    // - https://github.com/hakimel/reveal.js#configuration
+    // - https://github.com/hakimel/reveal.js#dependencies
+    Reveal.initialize({
+        slideNumber: true,
+        dependencies: [
+            {src: 'plugin/markdown/marked.js'},
+            {src: 'plugin/markdown/markdown.js'},
+            {src: 'plugin/notes/notes.js', async: true},
+            {
+                src: 'plugin/highlight/highlight.js', async: true, callback: function () {
+                    hljs.initHighlightingOnLoad();
+                }
+            }
+        ]
+    });
+</script>
+</body>
+</html>

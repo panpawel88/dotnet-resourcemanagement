@@ -1,0 +1,16 @@
+#box {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+.to_remove {
+    background-color: darkred;
+    width: 20px;
+    height: 80px;
+}
+
+.still_alive {
+    background-color: darkgreen;
+    width: 20px;
+    height: 80px;
+}
