@@ -75,7 +75,7 @@
                         {
                             public void Dispose()
                             {
-                            ...
+                              // ...
                             }
                         }
                     </code></pre>
@@ -298,11 +298,6 @@
     {
         private AutoResetEvent myEvt;
 
-        protected virtual void Dispose(bool disposing)
-        {
-                // ...
-        }
-
         public void Dispose()
         {
             Dispose(true);
@@ -313,6 +308,11 @@
         {
             Dispose(false);
         }
+
+        protected virtual void Dispose(bool disposing)
+        {
+                // ...
+        }
     }
                     </code></pre>
         </section>
@@ -320,11 +320,6 @@
         <section>
             <h2>Full Dispose pattern</h2>
             <pre><code data-trim data-noescape>
-        private void ReleaseUnmanagedResources()
-        {
-            // TODO release unmanaged resources here
-        }
-
         protected virtual void Dispose(bool disposing)
         {
             ReleaseUnmanagedResources();
@@ -332,6 +327,11 @@
             {
                 myEvt?.Dispose();
             }
+        }
+
+        private void ReleaseUnmanagedResources()
+        {
+            // TODO release unmanaged resources here
         }
          </code></pre>
         </section>
@@ -377,7 +377,7 @@
                 <li>GC organizes managed heap into 3 generations (Gen0, Gen1 and Gen2)</li>
                 <li>Newly allocated objects are assigned to Gen0</li>
                 <li>Objects which outlive first garbage collection are moved to Gen1</li>
-                <li>Other objects belong to Gen2</li>
+                <li>Objects which outlive second garbage collection are moved to Gen2</li>
             </ul>
         </section>
 
@@ -416,9 +416,51 @@
         <section>
             <h2>Background Garbage collection</h2>
             <ul>
-                <li>GC suspends all threads for Gen0 and Gen1</li>
-                <li>GC tries to NOT suspend all threads for Gen2</li>
+                <li>GC suspends all threads for collecting Gen0 and Gen1</li>
+                <li>GC tries to NOT suspend all threads for collecting Gen2</li>
             </ul>
+        </section>
+
+        <section>
+            <h2>GC.AddMemoryPressure() and GC.RemoveMemoryPressure()</h2>
+            <ul>
+                <li>GC monitors only managed objects</li>
+                <li>Application can inform GC about allocated unmanaged memory</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>GC.Collect()</h2>
+            <ul>
+                <li>Requests to perform garbage collection</li>
+                <li>Calling this method may unnecessary promote objects from Gen0 to Gen1 (and from Gen1 to Gen2)</li>
+                <li>General hint: trust GC</li>
+                <li>Exceptions:
+                <ul>
+                    <li>Application suspended for a long time</li>
+                    <li>Testing finalizers</li>
+                </ul></li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Tunning GC - GCSettings.LatencyMode</h2>
+            <ul>
+                <li>GCLatencyMode.Interactive</li>
+                <li>GCLatencyMode.LowLatency</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>References</h2>
+            <ul>
+                <li>C# 6.0 in a Nutshell, 6th Edition - Joseph Albahari, Ben Albahari</li>
+                <li>DotMemory video tutorials on YouTube</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>dotMemory demo</h2>
         </section>
 
     </div>
